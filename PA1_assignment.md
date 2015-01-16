@@ -1,0 +1,271 @@
+---
+title: "Peer Assessment 1"
+author: "Diego Mazzotti"
+date: "2015-01-16 13:51:39"
+output: html_document
+---
+
+This markdown document describes the steps used to analyze data from a personal activity monitoring device. This data is a two-month recording of steps taken in 5 minutes intervals each day, from an anonymous individual.
+
+###Loading and preprocessing the data
+
+First, we unzip the `activity.zip` file and read it into R using the following code:
+
+
+```r
+unzip("activity.zip")
+```
+
+```
+## Warning in unzip("activity.zip"): erro 1 na extração a partir de arquivo
+## zip
+```
+
+```r
+activity_data <- read.csv("activity.csv", header=T)
+```
+
+To make sure everything went right, let's show the first few lines of the dataset:
+
+
+```r
+head(activity_data)
+```
+
+```
+##   steps       date interval
+## 1    NA 2012-10-01        0
+## 2    NA 2012-10-01        5
+## 3    NA 2012-10-01       10
+## 4    NA 2012-10-01       15
+## 5    NA 2012-10-01       20
+## 6    NA 2012-10-01       25
+```
+
+
+Now, let's process the date to an object of class POSIXct, using the function `ymd()` from the package `lubridate`:
+
+
+```r
+#First, load package
+library(lubridate)
+
+#Then apply the function ymd()
+activity_data$date <- ymd(activity_data$date)
+```
+
+---
+
+###What is mean total number of steps taken per day?
+
+The next step is to answer the question **What is mean total number of steps taken per day?**. In this step, we have to create a vector containing the total number of steps per day. The total number of steps is the per day sum of steps. Using `split()` and `sapply()`, we can simply achieve that:
+
+
+```r
+#First create a vector with the total number of steps per day
+steps_day <- sapply(split(activity_data$steps, activity_data$date), sum)
+
+#Then, create a histogram with the distribution of the total number of steps taken each day (NAs omitted)
+hist(na.omit(steps_day), n=10, main="Histogram of total number of steps per day", xlab="Number of steps")
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-1.png) 
+
+```r
+#Finaly, create an objetct with the mean and meadian total number of steps taken per day
+total_mean_steps <- as.character(round(mean(na.omit(steps_day)), digits=2))
+total_median_steps <- median(na.omit(steps_day))
+```
+
+Based on the distribution of the steps per day, the mean total number of steps taken per day was **10766.19** and the median was **10765**.
+
+---
+
+###What is the average daily activity pattern?
+
+Here, we will show the average daily activity pattern. First, we will have to calculate the mean number of steps across all days for each of the 5 minutes interval. With a similar approach, we can achieve that using `split()` and `sapply()`:
+
+
+```r
+#First create a vector with the mean number of steps per interval, across all days
+mean_steps_interval <- sapply(split(activity_data$steps, activity_data$interval), mean, na.rm=T)
+
+#Then, plot a time series of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+#Create the sequence and format to show only Hours and Minutes:
+interval5min <- seq(as.POSIXct("00:00", format="%H:%M"), by=300, len=288)
+
+#Plot
+plot(interval5min, na.omit(mean_steps_interval), type="l", main="Mean daily activity pattern", ylab="Mean steps taken per 5-min interval", xlab="Time of the day")
+```
+
+![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5-1.png) 
+
+To find out which 5-min interval contains the maximum number of steps, we can create a new data frame with the time of the day (sequence of 5 minute intervals) and the average number of steps taken across all days for each interval, and look for the maximum value of the average
+
+
+```r
+#Format time object to show only hours and minutes
+interval5min_H_M <- format(interval5min, "%H:%M")
+
+#Create data frame
+mean_daily_act <- data.frame(interval=interval5min_H_M, mean_steps=na.omit(mean_steps_interval))
+
+#Get the index and interval of the maximum number of steps
+max_mean_step_interval <- mean_daily_act[which.max(mean_daily_act$mean_steps),1]
+```
+
+Therefore, the interval containing the maximum number of steps, on average, is the one starting at **08:35**. 
+
+
+###Imputing missing values
+
+The following code calculates the total number of `NA` in the dataset.
+
+
+```r
+#Total number of missing values in the dataset
+sum(is.na(activity_data$steps))
+```
+
+```
+## [1] 2304
+```
+
+There are **2304** 5-min intervals missing number of steps in the two-month recording.
+
+We will use the mean activity of each interval across all days which were recorded to replace missing data for that intervals. This information is already stored into the vector `mean_daily_act$mean_steps`.
+
+The strategy will consist of splitting `activity_data` into a list of data frames per interval, replace all the NAs by the mean activity for that interval
+
+
+```r
+#Split activity_data by interval
+act_list <- split(activity_data, activity_data$interval)
+
+
+#Iterate for each data.frame (interval) and substitute NAs for the mean steps for that interval
+for (i in 1:length(act_list)){
+        act_list[[i]]$steps[is.na(act_list[[i]]$steps)] <- mean_daily_act$mean_steps[i]
+}
+
+#Unsplit to convert to data frame again, using the same activity_data$interval factor 
+imputed_activity_data <- unsplit(act_list, activity_data$interval)
+
+#Check that this new data frame does not have any NAs
+sum(is.na(imputed_activity_data))
+```
+
+```
+## [1] 0
+```
+
+Now, lets make the histogram and calculate the mean and median total number of steps taken each day:
+
+
+```r
+#Calculate new total number of steps per day (round decimal number to floor)
+new_steps_day <- floor(sapply(split(imputed_activity_data$steps, imputed_activity_data$date), sum))
+
+#Then, create a histogram with the distribution of the total number of steps taken each day in the imputed data
+hist(new_steps_day, n=10, main="Histogram of total number of steps per day (imputed)", xlab="Number of steps")
+```
+
+![plot of chunk unnamed-chunk-9](figure/unnamed-chunk-9-1.png) 
+
+```r
+#Finaly, create objetct with the mean and meadian total number of steps taken per day on the imputed data
+new_total_mean_steps <- as.character(round(mean(new_steps_day), digits=2))
+new_total_median_steps <- as.character(median(floor(new_steps_day)))
+```
+
+On the imputed data, the mean total number of steps taken per day was **10766.16** and the median was **10766** (as compared to **10766.19** and **10765**, respectively, before imputation). Thus, in terms of central tendency measures, imputation did not affect the results.
+
+But let's compare both histograms (now using `ggplot2`):
+
+```r
+library(ggplot2)
+library(scales)
+
+#Create and format data frame for plot creation
+steps_day_df <- cbind(c(steps_day, new_steps_day), rep(c("Not Imputed", "Imputed"), each=length(new_steps_day)))
+rownames(steps_day_df) <- 1:nrow(steps_day_df)
+colnames(steps_day_df) <- c("steps", "imp")
+steps_day_df <- as.data.frame(steps_day_df)
+steps_day_df$steps <- as.numeric(as.character(steps_day_df$steps))
+
+#Plot histogram in facets
+ggplot(steps_day_df, aes(x=steps)) + geom_histogram(colour="black", fill="black") + 
+    facet_grid(. ~ imp) + xlab("Total number of steps") + ylab("Frequency")
+```
+
+```
+## stat_bin: binwidth defaulted to range/30. Use 'binwidth = x' to adjust this.
+## stat_bin: binwidth defaulted to range/30. Use 'binwidth = x' to adjust this.
+```
+
+![plot of chunk unnamed-chunk-10](figure/unnamed-chunk-10-1.png) 
+
+As we can see, no changes in the central tendency measures, but we can see a higher frequency of the center bin in the histogram.
+
+
+###Are there differences in activity patterns between weekdays and weekends?
+
+Here, we will create a new factor variable containing the weekday with the function `weekdays()`:
+
+
+```r
+#First set locale for English weekdays names
+my_locale <- Sys.getlocale(category = "LC_TIME") #save original locale time
+Sys.setlocale(category = "LC_TIME", locale= "en_US.UTF-8")
+```
+
+```
+## [1] "en_US.UTF-8"
+```
+
+```r
+#Create factor variable for weekday names (which is already in POSIXct format) and for weekend versus weekdays
+imputed_activity_data$weekday <- weekdays(imputed_activity_data$date)
+imputed_activity_data$week[which(imputed_activity_data$weekday=="Saturday" | imputed_activity_data$weekday=="Sunday")] <- "Weekend"
+imputed_activity_data$week[which(!imputed_activity_data$week=="Weekend")] <- "Weekday"
+
+#Turn back original system locale for time
+Sys.setlocale(category = "LC_TIME", locale= my_locale)
+```
+
+```
+## [1] "pt_BR.UTF-8"
+```
+
+Then, we will plot a panel plot to compare activity from weekdays versus weekends:
+
+
+```r
+#Split data frame by weekday x weekends
+week_list <- split(imputed_activity_data, imputed_activity_data$week, imputed_activity_data$interval)
+
+#Create a vector with the mean number of steps per interval, across each weekday
+weekday_mean_steps_interval <- sapply(split(week_list$Weekday$steps, week_list$Weekday$interval), mean)
+
+#And across each weekend day
+weekend_mean_steps_interval <- sapply(split(week_list$Weekend$steps, week_list$Weekend$interval), mean)
+
+#Then, plot a time series of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekdays or weekends(y-axis) using ggplot
+
+#Create and format df
+week_df <- data.frame(rep(interval5min,2), c(weekday_mean_steps_interval, weekend_mean_steps_interval), c(rep("Weekday", length(weekday_mean_steps_interval)),rep("Weekend", length(weekend_mean_steps_interval))))
+colnames(week_df) <- c("interval","mean_steps","week")
+
+#Plot
+ggplot(week_df, aes(interval, mean_steps)) +
+        geom_line() +
+        scale_x_datetime(breaks=("2 hour"), labels=date_format("%H:%M")) +
+        xlab("Time of the day") +
+        ylab("Mean steps taken per 5-min interval") +
+        facet_grid(week ~ .)
+```
+
+![plot of chunk unnamed-chunk-12](figure/unnamed-chunk-12-1.png) 
+
+Based on this data, we can see differences in patterns of mean daily activity for each interval of weekdays and weekends.
